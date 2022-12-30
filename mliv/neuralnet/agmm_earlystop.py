@@ -40,7 +40,7 @@ def approx_sup_kernel_moment_eval(y, g_of_x, f_of_z_collection, basis_func, sigm
 def approx_sup_moment_eval(y, g_of_x, f_of_z_collection):
     eval_list = []
     for f_of_z in f_of_z_collection:
-        mean_moment = f_of_z.cpu().mul(y.cpu() - g_of_x.cpu()).mean()
+        mean_moment = f_of_z.cpu().mul(y.cpu() - g_of_x.cpu()).mean().abs()
         eval_list.append(mean_moment)
     return float(np.max(eval_list))
 
@@ -328,12 +328,27 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     f_of_z_dev = self.adversary(Z_dev)
                 f_of_z_dev_collection.append(f_of_z_dev)
 
+        if self.special_test:
+            f_of_z_dev_collection.append(Z_dev[:, [0]])
         return f_of_z_dev_collection
+
+
+class SpecialAdversary(nn.Module):
+
+    def __init__(self, adversary):
+        super(SpecialAdversary, self).__init__()
+        self.adversary = adversary
+        # Scharfstein-Rotnitzky-Robins correction parameter
+        self.beta = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        # Scharfstein-Rotnitzky-Robins corrected output
+        return self.adversary(x) + self.beta * x[:, [0]]
 
 
 class AGMMEarlyStop(_BaseSupLossAGMM):
 
-    def __init__(self, learner, adversary):
+    def __init__(self, learner, adversary, *, special_test=False):
         """
         Parameters
         ----------
@@ -341,8 +356,12 @@ class AGMMEarlyStop(_BaseSupLossAGMM):
         adversary : a pytorch neural net module
         """
         self.learner = learner
-        self.adversary = adversary
+        if not special_test:
+            self.adversary = adversary
+        else:
+            self.adversary = SpecialAdversary(adversary)
         # whether we have a norm penalty for the adversary
         self.adversary_reg = False
         # which adversary parameters to not ell2 penalize
         self.skip_list = []
+        self.special_test = special_test
