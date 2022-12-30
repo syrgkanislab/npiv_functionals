@@ -38,20 +38,25 @@ def approx_sup_kernel_moment_eval(y, g_of_x, f_of_z_collection, basis_func, sigm
 
 
 def approx_sup_moment_eval(y, g_of_x, f_of_z_collection):
-    eval_list = []
-    for f_of_z in f_of_z_collection:
-        mean_moment = f_of_z.cpu().mul(y.cpu() - g_of_x.cpu()).mean().abs()
-        eval_list.append(mean_moment)
-    return float(np.max(eval_list))
+    # we find the maximum of the moment violations |E[ft(Z) * (y - g(X))]|
+    # for each ft in the collection.
+    return float(f_of_z_collection.mul(y - g_of_x).mean(dim=0).abs().max())
 
 
 def approx_sup_riesz_loss_eval(m_of_g_of_x, g_of_x, f_of_z_collection):
-    eval_list = []
-    for f_of_z in f_of_z_collection:
-        mean_moment = (.5 * f_of_z.cpu().mul(g_of_x.cpu()) -
-                       m_of_g_of_x).mean()
-        eval_list.append(mean_moment)
-    return float(np.max(eval_list))
+    # we find E[g(X) | Z], as a linear function of the f1(Z), ..., fk(Z)
+    # in the collection with ridge regression. Then the loss is
+    # E[g(X) E[g(X)|Z]] - .5 E[E[g(X)|Z]^2] - E[m(W;g)]
+    n = f_of_z_collection.shape[0]
+    d = f_of_z_collection.shape[1]
+    norm_test = (f_of_z_collection**2).mean(axis=1).sqrt().quantile(.9)
+    l2reg = norm_test / np.sqrt(n)
+    fg = f_of_z_collection.mul(g_of_x).mean(dim=0, keepdim=True)
+    cov = f_of_z_collection.T.matmul(f_of_z_collection) / n
+    theta = torch.linalg.pinv(cov + l2reg * torch.eye(d)).matmul(fg.T)
+    proj_g = f_of_z_collection.matmul(theta)
+    proj_square = g_of_x.mul(proj_g).mean() - .5 * (proj_g**2).mean()
+    return float((proj_square - m_of_g_of_x.mean()).cpu())
 
 
 def add_weight_decay(net, l2_value, skip_list=()):
@@ -152,7 +157,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
             learner_l2=1e-3, adversary_l2=1e-4, adversary_norm_reg=1e-3,
             learner_tikhonov=0,
             learner_lr=0.001, adversary_lr=0.001, n_epochs=100, bs=100, train_learner_every=1, train_adversary_every=1,
-            ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False, moment_fn=None):
+            ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False, moment_fn=None,
+            verbose=0):
         """
         Parameters
         ----------
@@ -184,7 +190,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
                                                      adversary_norm_reg, learner_tikhonov,
                                                      train_learner_every, train_adversary_every, riesz, moment_fn)
 
-        dprint(DEBUG, "f(z_dev) collection prepared.")
+        dprint(verbose, "f(z_dev) collection prepared.")
 
         # reset weights of learner and adversary
         self.learner.apply(reinit_weights)
@@ -195,7 +201,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
         best_learner_state_dict = copy.deepcopy(self.learner.state_dict())
 
         for epoch in range(n_epochs):
-            dprint(DEBUG, "Epoch #", epoch, sep="")
+            dprint(verbose, "Epoch #", epoch, sep="")
             for it, (zb, xb, yb) in enumerate(self.train_dl):
 
                 zb, xb, yb = map(lambda x: x.to(device), (zb, xb, yb))
@@ -255,7 +261,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     g_of_x_dev = self.learner(T_dev)
                     curr_eval = approx_sup_moment_eval(
                         Y_dev.cpu(), g_of_x_dev, f_of_z_dev_collection)
-                dprint(DEBUG, "Current moment approx:", curr_eval)
+                dprint(verbose, "Current moment approx:", curr_eval)
                 eval_history.append(curr_eval)
                 if min_eval > curr_eval:
                     min_eval = curr_eval
@@ -337,7 +343,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
 
         if self.special_test:
             f_of_z_dev_collection.append(Z_dev[:, [0]])
-        return f_of_z_dev_collection
+            f_of_z_dev_collection.append(-Z_dev[:, [0]])
+        return torch.cat(f_of_z_dev_collection, dim=1)
 
 
 class SpecialAdversary(nn.Module):
