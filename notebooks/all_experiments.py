@@ -148,7 +148,7 @@ for clever in [False, True]:
     for fname in ['abs', '2dpoly', 'sigmoid', 'sin']:
         for n in [500, 1000, 2000]:
             for iv_strength in [.2, .5, .7, .9]:
-                lambda_l2_h = 1 / n**(.9)
+                lambda_l2_h = .1 / n**(.9)
                 Z, T, Y, true_fn = get_data(
                     1000000, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num)
                 true = np.mean(moment_fn(T, true_fn, device='cpu'))
