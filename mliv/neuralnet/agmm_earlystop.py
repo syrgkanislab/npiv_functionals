@@ -17,7 +17,7 @@ from .utilities import dprint
 # automatic differentiation. Should be removed once pytorch fixes the instability.
 # It can be set to 0 if using pytorch 1.4.0
 EPSILON = 1e-2
-DEBUG = True
+DEBUG = False
 
 
 def approx_sup_kernel_moment_eval(y, g_of_x, f_of_z_collection, basis_func, sigma, batch_size=100):
@@ -68,7 +68,7 @@ def add_weight_decay(net, l2_value, skip_list=()):
 
 def reinit_weights(layer):
     if type(layer) == nn.Linear or type(layer) == nn.Conv2d:
-        torch.nn.init.xavier_uniform(layer.weight.data)
+        torch.nn.init.xavier_uniform_(layer.weight.data)
 
 
 def _kernel(x, y, basis_func, sigma):
@@ -150,6 +150,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
 
     def fit(self, Z, T, Y, Z_dev, T_dev, Y_dev, eval_freq=1,
             learner_l2=1e-3, adversary_l2=1e-4, adversary_norm_reg=1e-3,
+            learner_tikhonov=0,
             learner_lr=0.001, adversary_lr=0.001, n_epochs=100, bs=100, train_learner_every=1, train_adversary_every=1,
             ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False, moment_fn=None):
         """
@@ -179,7 +180,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                                  warm_start, logger, model_dir, device)
 
         # early_stopping
-        f_of_z_dev_collection = self._earlystop_eval(Z, T, Y, Z_dev, T_dev, Y_dev, device, 100, ols_weight, adversary_norm_reg,
+        f_of_z_dev_collection = self._earlystop_eval(Z, T, Y, Z_dev, T_dev, Y_dev, device, 100, ols_weight,
+                                                     adversary_norm_reg, learner_tikhonov,
                                                      train_learner_every, train_adversary_every, riesz, moment_fn)
 
         dprint(DEBUG, "f(z_dev) collection prepared.")
@@ -208,6 +210,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     else:
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
+                        if learner_tikhonov > 0:
+                            D_loss += learner_tikhonov * torch.mean(test**2)
                     self.optimizerD.zero_grad()
                     D_loss.backward()
                     self.optimizerD.step()
@@ -272,7 +276,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
         return self
 
     def _earlystop_eval(self, Z_train, T_train, Y_train, Z_dev, T_dev, Y_dev, device=None, n_epochs=60,
-                        ols_weight=0., adversary_norm_reg=1e-3, train_learner_every=1, train_adversary_every=1,
+                        ols_weight=0., adversary_norm_reg=1e-3, learner_tikhonov=0.0,
+                        train_learner_every=1, train_adversary_every=1,
                         riesz=False, moment_fn=None):
         '''
         Create a set of test functions to evaluate against for early stopping
@@ -294,6 +299,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     else:
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
+                        if learner_tikhonov > 0:
+                            D_loss += learner_tikhonov * torch.mean(test**2)
                     self.optimizerD.zero_grad()
                     D_loss.backward()
                     self.optimizerD.step()
