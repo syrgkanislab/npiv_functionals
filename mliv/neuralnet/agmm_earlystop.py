@@ -211,7 +211,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
                         if learner_tikhonov > 0:
-                            D_loss += learner_tikhonov * torch.mean(test**2)
+                            D_loss += learner_tikhonov * torch.mean(pred**2)
                     self.optimizerD.zero_grad()
                     D_loss.backward()
                     self.optimizerD.step()
@@ -228,8 +228,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     if riesz:
                         G_loss = - torch.mean(pred * test - .5 * test**2)
                     else:
-                        G_loss = - torch.mean((yb - pred) *
-                                              test) + torch.mean(test**2)
+                        G_loss = - torch.mean((yb - pred)
+                                              * test - .5 * test**2)
                     G_loss += adversary_norm_reg * reg
                     self.optimizerG.zero_grad()
                     G_loss.backward()
@@ -300,7 +300,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
                         if learner_tikhonov > 0:
-                            D_loss += learner_tikhonov * torch.mean(test**2)
+                            D_loss += learner_tikhonov * torch.mean(pred**2)
                     self.optimizerD.zero_grad()
                     D_loss.backward()
                     self.optimizerD.step()
@@ -318,7 +318,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
                         G_loss = - torch.mean(pred * test - .5 * test**2)
                     else:
                         G_loss = - torch.mean((yb - pred) *
-                                              test) + torch.mean(test**2)
+                                              test - .5 * test**2)
                     G_loss += adversary_norm_reg * reg
                     self.optimizerG.zero_grad()
                     G_loss.backward()
