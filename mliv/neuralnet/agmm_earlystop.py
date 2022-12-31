@@ -135,14 +135,14 @@ class _BaseAGMM:
         if model == 'avg':
             preds = np.array([torch.load(os.path.join(self.model_dir,
                                                       "epoch{}".format(i)))(T).cpu().data.numpy()
-                              for i in np.arange(burn_in, self.n_epochs)])
+                              for i in np.arange(burn_in, self.n_epochs_)])
             if alpha is None:
                 return np.mean(preds, axis=0)
             else:
                 return np.mean(preds, axis=0), np.percentile(preds, 100 * alpha / 2, axis=0), np.percentile(preds, 100 * (1 - alpha / 2), axis=0)
         if model == 'final':
             return torch.load(os.path.join(self.model_dir,
-                                           "epoch{}".format(self.n_epochs - 1)))(T).cpu().data.numpy()
+                                           "epoch{}".format(self.n_epochs_ - 1)))(T).cpu().data.numpy()
         if model == 'earlystop':
             return torch.load(os.path.join(self.model_dir,
                                            "earlystop"))(T).cpu().data.numpy()
@@ -158,7 +158,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
             learner_tikhonov=0,
             learner_lr=0.001, adversary_lr=0.001, n_epochs=100, bs=100, train_learner_every=1, train_adversary_every=1,
             ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False, moment_fn=None,
-            verbose=0):
+            verbose=0, earlystop_rounds=150, earlystop_delta=0, min_eval_epoch=0):
         """
         Parameters
         ----------
@@ -199,6 +199,13 @@ class _BaseSupLossAGMM(_BaseAGMM):
         eval_history = []
         min_eval = float("inf")
         best_learner_state_dict = copy.deepcopy(self.learner.state_dict())
+        time_since_last_improvement = 0
+        # lr_schedulerD = optim.lr_scheduler.ReduceLROnPlateau(self.optimizerD, mode='min', factor=0.5,
+        #                                                      patience=50, threshold=0.0, threshold_mode='abs', cooldown=0, min_lr=0,
+        #                                                      eps=1e-08, verbose=(verbose > 0))
+        # lr_schedulerG = optim.lr_scheduler.ReduceLROnPlateau(self.optimizerG, mode='min', factor=0.5,
+        #                                                      patience=50, threshold=0.0, threshold_mode='abs', cooldown=0, min_lr=0,
+        #                                                      eps=1e-08, verbose=(verbose > 0))
 
         for epoch in range(n_epochs):
             dprint(verbose, "Epoch #", epoch, sep="")
@@ -249,7 +256,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
             if logger is not None:
                 logger(self.learner, self.adversary, epoch, self.writer)
 
-            if epoch % eval_freq == 0:
+            if (epoch % eval_freq == 0) & (epoch > min_eval_epoch):
                 self.learner.eval()
                 self.adversary.eval()
                 if riesz:
@@ -260,15 +267,34 @@ class _BaseSupLossAGMM(_BaseAGMM):
                 else:
                     g_of_x_dev = self.learner(T_dev)
                     curr_eval = approx_sup_moment_eval(
-                        Y_dev.cpu(), g_of_x_dev, f_of_z_dev_collection)
+                        Y_dev, g_of_x_dev, f_of_z_dev_collection)
+
                 dprint(verbose, "Current moment approx:", curr_eval)
+                if logger is not None:
+                    self.writer.add_scalar(
+                        f'eval_metric_riesz_{riesz}', curr_eval, epoch)
+                    if not riesz:
+                        self.writer.add_scalar(
+                            f'eval_metric_orthogonality', float(
+                                f_of_z_dev_collection[:, [-1]].mul(Y_dev - g_of_x_dev).mean().abs()), epoch)
+
                 eval_history.append(curr_eval)
-                if min_eval > curr_eval:
+                # lr_schedulerD.step(curr_eval)
+                # lr_schedulerG.step(curr_eval)
+
+                if min_eval > curr_eval + earlystop_delta:
                     min_eval = curr_eval
+                    time_since_last_improvement = 0
                     best_learner_state_dict = copy.deepcopy(
                         self.learner.state_dict())
+                else:
+                    time_since_last_improvement += 1
+                    if time_since_last_improvement > earlystop_rounds:
+                        break
 
             # end of epoch loop
+
+        self.n_epochs_ = epoch + 1
 
         # select best model according to early stop criterion
         self.learner.load_state_dict(best_learner_state_dict)
@@ -343,8 +369,12 @@ class _BaseSupLossAGMM(_BaseAGMM):
 
         if self.special_test:
             f_of_z_dev_collection.append(Z_dev[:, [0]])
-            f_of_z_dev_collection.append(-Z_dev[:, [0]])
-        return torch.cat(f_of_z_dev_collection, dim=1)
+
+        # Normalize test functions
+        f_of_z_dev_collection = torch.cat(f_of_z_dev_collection, dim=1)
+        f_of_z_dev_collection = f_of_z_dev_collection / \
+            ((f_of_z_dev_collection**2)).mean(axis=0, keepdim=True).sqrt()
+        return f_of_z_dev_collection
 
 
 class SpecialAdversary(nn.Module):
