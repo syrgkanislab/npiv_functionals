@@ -43,6 +43,10 @@ def approx_sup_moment_eval(y, g_of_x, f_of_z_collection):
     return float(f_of_z_collection.mul(y - g_of_x).mean(dim=0).abs().max())
 
 
+def approx_sup_riesz_moment_eval(g_of_x, f_of_z_collection, m_of_f_of_z_collection):
+    return float((f_of_z_collection.mul(g_of_x) - m_of_f_of_z_collection).mean(dim=0).abs().max())
+
+
 def approx_sup_riesz_loss_eval(m_of_g_of_x, g_of_x, f_of_z_collection):
     # we find E[g(X) | Z], as a linear function of the f1(Z), ..., fk(Z)
     # in the collection with ridge regression. Then the loss is
@@ -157,7 +161,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
             learner_l2=1e-3, adversary_l2=1e-4, adversary_norm_reg=1e-3,
             learner_tikhonov=0,
             learner_lr=0.001, adversary_lr=0.001, n_epochs=100, bs=100, train_learner_every=1, train_adversary_every=1,
-            ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False, moment_fn=None,
+            ols_weight=0., warm_start=False, logger=None, model_dir='model', device=None, riesz=False,
+            direct_riesz=False, moment_fn=None,
             verbose=0, earlystop_rounds=150, earlystop_delta=0, min_eval_epoch=0):
         """
         Parameters
@@ -186,9 +191,11 @@ class _BaseSupLossAGMM(_BaseAGMM):
                                  warm_start, logger, model_dir, device)
 
         # early_stopping
-        f_of_z_dev_collection = self._earlystop_eval(Z, T, Y, Z_dev, T_dev, Y_dev, device, 100, ols_weight,
-                                                     adversary_norm_reg, learner_tikhonov,
-                                                     train_learner_every, train_adversary_every, riesz, moment_fn)
+        f_of_z_dev_collection, m_of_f_of_z_dev_collection = self._earlystop_eval(Z, T, Y,
+                                                                                 Z_dev, T_dev, Y_dev, device, 100, ols_weight,
+                                                                                 adversary_norm_reg, learner_tikhonov,
+                                                                                 train_learner_every, train_adversary_every,
+                                                                                 riesz, direct_riesz, moment_fn)
 
         dprint(verbose, "f(z_dev) collection prepared.")
 
@@ -220,6 +227,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     if riesz:
                         D_loss = torch.mean(
                             pred * test - moment_fn(xb, self.learner, device))
+                    elif direct_riesz:
+                        D_loss = - torch.mean(pred * test)
                     else:
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
@@ -240,6 +249,9 @@ class _BaseSupLossAGMM(_BaseAGMM):
                         test = self.adversary(zb)
                     if riesz:
                         G_loss = - torch.mean(pred * test - .5 * test**2)
+                    elif direct_riesz:
+                        G_loss = - torch.mean(moment_fn(
+                            xb, self.adversary, device) - self.learner(xb) * test) + torch.mean(test**2)
                     else:
                         G_loss = - torch.mean((yb - pred)
                                               * test - .5 * test**2)
@@ -264,6 +276,10 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     m_of_g_of_x_dev = moment_fn(T_dev, self.learner, device)
                     curr_eval = approx_sup_riesz_loss_eval(
                         m_of_g_of_x_dev, g_of_x_dev, f_of_z_dev_collection)
+                elif direct_riesz:
+                    g_of_x_dev = self.learner(T_dev)
+                    curr_eval = approx_sup_riesz_moment_eval(
+                        g_of_x_dev, f_of_z_dev_collection, m_of_f_of_z_dev_collection)
                 else:
                     g_of_x_dev = self.learner(T_dev)
                     curr_eval = approx_sup_moment_eval(
@@ -272,8 +288,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                 dprint(verbose, "Current moment approx:", curr_eval)
                 if logger is not None:
                     self.writer.add_scalar(
-                        f'eval_metric_riesz_{riesz}', curr_eval, epoch)
-                    if not riesz:
+                        f'eval_metric_riesz_{riesz | direct_riesz}', curr_eval, epoch)
+                    if (not riesz) and (not direct_riesz):
                         self.writer.add_scalar(
                             f'eval_metric_orthogonality', float(
                                 f_of_z_dev_collection[:, [-1]].mul(Y_dev - g_of_x_dev).mean().abs()), epoch)
@@ -310,11 +326,13 @@ class _BaseSupLossAGMM(_BaseAGMM):
     def _earlystop_eval(self, Z_train, T_train, Y_train, Z_dev, T_dev, Y_dev, device=None, n_epochs=60,
                         ols_weight=0., adversary_norm_reg=1e-3, learner_tikhonov=0.0,
                         train_learner_every=1, train_adversary_every=1,
-                        riesz=False, moment_fn=None):
+                        riesz=False, direct_riesz=False, moment_fn=None):
         '''
         Create a set of test functions to evaluate against for early stopping
         '''
         f_of_z_dev_collection = []
+        if direct_riesz:
+            m_of_f_of_z_dev_collection = []
         # training loop for n_epochs on Z_train,T_train,Y_train
         for epoch in range(n_epochs):
             for it, (zb, xb, yb) in enumerate(self.train_dl):
@@ -328,6 +346,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     if riesz:
                         D_loss = torch.mean(
                             pred * test - moment_fn(xb, self.learner, device))
+                    elif direct_riesz:
+                        D_loss = - torch.mean(pred * test)
                     else:
                         D_loss = torch.mean(
                             (yb - pred) * test) + ols_weight * torch.mean((yb - pred)**2)
@@ -348,6 +368,9 @@ class _BaseSupLossAGMM(_BaseAGMM):
                         test = self.adversary(zb)
                     if riesz:
                         G_loss = - torch.mean(pred * test - .5 * test**2)
+                    elif direct_riesz:
+                        G_loss = - torch.mean(moment_fn(
+                            xb, self.adversary, device) - self.learner(xb) * test) + torch.mean(test**2)
                     else:
                         G_loss = - torch.mean((yb - pred) *
                                               test - .5 * test**2)
@@ -366,16 +389,25 @@ class _BaseSupLossAGMM(_BaseAGMM):
                 else:
                     f_of_z_dev = self.adversary(Z_dev)
                 f_of_z_dev_collection.append(f_of_z_dev)
+                if direct_riesz:
+                    m_of_f_of_z_dev_collection.append(
+                        moment_fn(Z_dev, self.adversary, device))
 
         if self.special_test:
             f_of_z_dev_collection.append(Z_dev[:, [0]])
 
         # Normalize test functions
         f_of_z_dev_collection = torch.cat(f_of_z_dev_collection, dim=1)
-        f_of_z_dev_collection = f_of_z_dev_collection
-        f_of_z_dev_collection = f_of_z_dev_collection / \
-            ((f_of_z_dev_collection**2)).mean(axis=0, keepdim=True).sqrt()
-        return f_of_z_dev_collection
+        norms = ((f_of_z_dev_collection**2)).mean(axis=0, keepdim=True).sqrt()
+        f_of_z_dev_collection = f_of_z_dev_collection / norms
+
+        if not direct_riesz:
+            return f_of_z_dev_collection, None
+        else:
+            m_of_f_of_z_dev_collection = torch.cat(
+                m_of_f_of_z_dev_collection, dim=1)
+            m_of_f_of_z_dev_collection = m_of_f_of_z_dev_collection / norms
+            return f_of_z_dev_collection, m_of_f_of_z_dev_collection
 
 
 class SpecialAdversary(nn.Module):
@@ -388,7 +420,7 @@ class SpecialAdversary(nn.Module):
 
     def forward(self, x):
         # Scharfstein-Rotnitzky-Robins corrected output
-        return self.adversary(x) + self.beta * x[:, [0]]
+        return self.adversary(x[:, 1:]) + self.beta * x[:, [0]]
 
 
 class AGMMEarlyStop(_BaseSupLossAGMM):
