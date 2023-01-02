@@ -155,7 +155,9 @@ for direct_riesz in [True]:
                     print(f'True: {true:.4f}')
                     results = Parallel(n_jobs=-1, verbose=3)(delayed(exp)(it, n, n_z, n_t, iv_strength,
                                                                           fname, dgp_num, moment_fn,
-                                                                          special_test=clever, lambda_l2_h=lambda_l2_h)
+                                                                          special_test=clever,
+                                                                          lambda_l2_h=lambda_l2_h,
+                                                                          direct_riesz=direct_riesz)
                                                              for it in range(100))
                     if direct_riesz:
                         joblib.dump((true, results),
