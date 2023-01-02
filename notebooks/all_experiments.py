@@ -73,11 +73,15 @@ def exp(it, n, n_z, n_t, iv_strength, fname, dgp_num, moment_fn, special_test=Tr
     augZ_train = Z_train
     if special_test:
         qtrain = torch.tensor(qfun.predict(Z_train).reshape(-1, 1)).float()
+        # .1 is to avoid overshooting in the training of the coefficient during the first
+        # few epochs of gradient descent; especially since coefficient is un-penalized
+        qtrain = .1 * qtrain / (qtrain**2).mean().sqrt()
         augZ_train = torch.cat([qtrain, Z_train], dim=1)
         qval = torch.tensor(qfun.predict(Z_val).reshape(-1, 1)).float()
+        qval = .1 * qval / (qval**2).mean().sqrt()
         augZ_val = torch.cat([qval, Z_val], dim=1)
 
-    adversary_fn = nn.Sequential(nn.Dropout(p=p), nn.Linear(augZ_train.shape[1], n_hidden), nn.LeakyReLU(),
+    adversary_fn = nn.Sequential(nn.Dropout(p=p), nn.Linear(n_z, n_hidden), nn.LeakyReLU(),
                                  nn.Dropout(p=p), nn.Linear(n_hidden, 1))
     learner = nn.Sequential(nn.Dropout(p=p), nn.Linear(n_t, n_hidden), nn.LeakyReLU(),
                             nn.Dropout(p=p), nn.Linear(n_hidden, 1))
@@ -121,9 +125,9 @@ def moment_fn(x, fn, device): return avg_small_diff(x, fn, device, epsilon)
 
 
 for clever in [False, True]:
-    for fname in ['abs', '2dpoly', 'sigmoid', 'sin']:
-        for n in [500, 1000, 2000]:
-            for iv_strength in [.2, .5, .7, .9]:
+    for fname in ['2dpoly']:
+        for n in [2000, 20000]:
+            for iv_strength in [.01, .05, .1]:
                 lambda_l2_h = .1 / n**(.9)
                 Z, T, Y, true_fn = get_data(
                     1000000, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num)

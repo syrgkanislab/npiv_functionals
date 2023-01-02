@@ -372,6 +372,7 @@ class _BaseSupLossAGMM(_BaseAGMM):
 
         # Normalize test functions
         f_of_z_dev_collection = torch.cat(f_of_z_dev_collection, dim=1)
+        f_of_z_dev_collection = f_of_z_dev_collection
         f_of_z_dev_collection = f_of_z_dev_collection / \
             ((f_of_z_dev_collection**2)).mean(axis=0, keepdim=True).sqrt()
         return f_of_z_dev_collection
