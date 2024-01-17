@@ -2,9 +2,11 @@
 
 Code for replication of experiments in the paper:
 
-Dikkala, Nishanth, Greg Lewis, Lester Mackey, and Vasilis Syrgkanis. "Minimax estimation of conditional moment models." arXiv preprint arXiv:2006.07201 (2020).
+Inference on Strongly Identified Functionals of Weakly Identified Functions
 
-https://arxiv.org/abs/2006.07201
+Andrew Bennett, Nathan Kallus, Xiaojie Mao, Whitney Newey, Vasilis Syrgkanis, Masatoshi Uehara
+
+https://arxiv.org/abs/2208.08291
 
 # Installation
 
