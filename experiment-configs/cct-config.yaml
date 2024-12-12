@@ -1,0 +1,33 @@
+scenario: 'CCT' 
+num-instruments: 13
+num-treatments: 13
+direct-riesz: False
+true-theta-num-sample: 1000000
+num-reps: 100
+setup-options:
+  clever:
+    - True 
+    - False 
+  dgp-version: 
+    - 'MC2'
+  n:
+    - 1000
+    - 5000
+  iv-strength:
+    - 1.0
+model-kwargs:
+  p_dropout: 0.1
+  n_hidden: 100
+learner-kwargs:
+  learner_lr: !!float 5e-3
+  adversary_lr: !!float 5e-2
+  learner_l2: !!float 1e-6
+  adversary_l2: !!float 1e-6
+  n_epochs: 10000
+  bs: 100
+  min_eval_epoch: 50
+  n_earlystop_funcs: 1000
+  earlystop_save_every: 5
+q-reg-kwargs:
+  min_samples_leaf: 20
+base_lambda_l2_h: !!float 1e-3

@@ -1,0 +1,2 @@
+python run-experiments-batch.py --config-path experiment-configs/pliv-config.yaml --save-dir results/pliv
+python run-experiments-batch.py --config-path experiment-configs/cct-config.yaml --save-dir results/cct
