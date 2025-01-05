@@ -126,33 +126,14 @@ class _BaseAGMM:
 
         return Z, T, Y
 
-    def predict(self, T, model='earlystop', burn_in=0, alpha=None):
+    def predict(self, T):
         """
         Parameters
         ----------
         T : treatments
-        model : one of ('avg', 'final'), whether to use an average of models or the final
-        burn_in : discard the first "burn_in" epochs when doing averaging
-        alpha : if not None but a float, then it also returns the a/2 and 1-a/2, percentile of
-            the predictions across different epochs (proxy for a confidence interval)
         """
-        if model == 'avg':
-            preds = np.array([torch.load(os.path.join(self.model_dir,
-                                                      "epoch{}".format(i)))(T).cpu().data.numpy()
-                              for i in np.arange(burn_in, self.n_epochs_)])
-            if alpha is None:
-                return np.mean(preds, axis=0)
-            else:
-                return np.mean(preds, axis=0), np.percentile(preds, 100 * alpha / 2, axis=0), np.percentile(preds, 100 * (1 - alpha / 2), axis=0)
-        if model == 'final':
-            return torch.load(os.path.join(self.model_dir,
-                                           "epoch{}".format(self.n_epochs_ - 1)))(T).cpu().data.numpy()
-        if model == 'earlystop':
-            return torch.load(os.path.join(self.model_dir,
-                                           "earlystop"))(T).cpu().data.numpy()
-        if isinstance(model, int):
-            return torch.load(os.path.join(self.model_dir,
-                                           "epoch{}".format(model)))(T).cpu().data.numpy()
+        return torch.load(os.path.join(self.model_dir,
+                                       "earlystop"))(T).cpu().data.numpy()
 
 
 class _BaseSupLossAGMM(_BaseAGMM):
@@ -262,8 +243,8 @@ class _BaseSupLossAGMM(_BaseAGMM):
                     self.adversary.eval()
                 # end of training loop
 
-            torch.save(self.learner, os.path.join(
-                self.model_dir, "epoch{}".format(epoch)))
+            # torch.save(self.learner, os.path.join(
+            #     self.model_dir, "epoch{}".format(epoch)))
 
             if logger is not None:
                 logger(self.learner, self.adversary, epoch, self.writer)
