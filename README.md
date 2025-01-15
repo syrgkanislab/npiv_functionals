@@ -22,10 +22,12 @@ cvxopt is installed by running the setup.py command above. The rest need to be i
 
 # Replication
 
-To replicate the tables in the paper:
+To replicate the tables in the paper related to neural network experiments run:
 ```
 cd notebooks
 python all_experiments.py
 ```
-
 Once the code finishes, then execute the jupyter notebook `notebooks\Postprocess.ipynb`
+
+
+To replicate the tables in the paper related to RKHS experiments run the notebook: `notebooks\RKHS.ipynb`
