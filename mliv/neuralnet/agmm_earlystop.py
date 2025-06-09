@@ -133,7 +133,7 @@ class _BaseAGMM:
         T : treatments
         """
         return torch.load(os.path.join(self.model_dir,
-                                       "earlystop"))(T).cpu().data.numpy()
+                                       "earlystop"), weights_only=False)(T).cpu().data.numpy()
 
 
 class _BaseSupLossAGMM(_BaseAGMM):
