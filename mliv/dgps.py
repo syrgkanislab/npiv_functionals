@@ -167,8 +167,9 @@ def get_data(n_samples, n_instruments, iv_strength, tau_fn, dgp_num, *, endogene
         # matters for the outcome.
         z = np.random.normal(0, 2, size=(n_samples, n_instruments))
         U = np.random.normal(0, 2, size=(n_samples, 1))
+        eta = np.random.normal(0, .1, size=(n_samples, 1))
         zeta = np.random.normal(0, .1, size=(n_samples, 1))
-        p = iv_strength * z + endogeneity_strength * U
+        p = iv_strength * z + endogeneity_strength * U + eta
         y = fn(p) + U + zeta
 
     return standardize(z, p, y, fn)
