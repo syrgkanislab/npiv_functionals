@@ -102,7 +102,7 @@ def standardize(z, p, y, fn):
     return z, p, y, newfn
 
 
-def get_data(n_samples, n_instruments, iv_strength, tau_fn, dgp_num):
+def get_data(n_samples, n_instruments, iv_strength, tau_fn, dgp_num, *, endogeneity_strength=0.3):
     # Construct dataset
     # z:- instruments (features included here, can be high-dimensional)
     # p :- treatments (features included here as well, can be high-dimensional)
@@ -167,9 +167,8 @@ def get_data(n_samples, n_instruments, iv_strength, tau_fn, dgp_num):
         # matters for the outcome.
         z = np.random.normal(0, 2, size=(n_samples, n_instruments))
         U = np.random.normal(0, 2, size=(n_samples, 1))
-        delta = np.random.normal(0, .1, size=(n_samples, 1))
         zeta = np.random.normal(0, .1, size=(n_samples, 1))
-        p = iv_strength * z + (1 - iv_strength) * U + delta
+        p = iv_strength * z + endogeneity_strength * U
         y = fn(p) + U + zeta
 
     return standardize(z, p, y, fn)
