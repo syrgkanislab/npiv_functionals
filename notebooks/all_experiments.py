@@ -57,7 +57,7 @@ class DeepNetWithBypass(nn.Module):
             return deep_out
 
 
-def exp(it, n, n_z, n_t, iv_strength, fname, dgp_num, moment_fn, special_test=True, lambda_l2_h=0, direct_riesz=False):
+def exp(it, n, n_z, n_t, iv_strength, endogeneity_strength, fname, dgp_num, moment_fn, special_test=True, lambda_l2_h=0, direct_riesz=False):
     np.random.seed(it)
     warnings.simplefilter('ignore')
 
@@ -85,7 +85,7 @@ def exp(it, n, n_z, n_t, iv_strength, fname, dgp_num, moment_fn, special_test=Tr
         n_t = T.shape[1]
     else:
         Z, T, Y, _ = get_data(
-            n, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num)
+            n, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num, endogeneity_strength=endogeneity_strength)
     Z_train, Z_val, T_train, T_val, Y_train, Y_val = train_test_split(
         Z, T, Y, test_size=.5, shuffle=True)
     Z_train, T_train, Y_train = map(
@@ -186,7 +186,7 @@ def exp(it, n, n_z, n_t, iv_strength, fname, dgp_num, moment_fn, special_test=Tr
         return dr, dr, ipw, reg
 
 
-def run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength):
+def run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength):
     print(f'fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_clever_{clever}')
     dgp_num = 5
     epsilon = 0.1  # average finite difference epsilon
@@ -198,10 +198,10 @@ def run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength):
         true = 1.0
     else:
         Z, T, Y, true_fn = get_data(
-            1000000, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num)
+            1000000, n_z, iv_strength, get_tau_fn(fn_dict[fname]), dgp_num, endogeneity_strength=endogeneity_strength)
         true = np.mean(moment_fn(T, true_fn, device='cpu'))
     print(f'True: {true:.4f}')
-    results = Parallel(n_jobs=-1, verbose=3)(delayed(exp)(it, n, n_z, n_t, iv_strength,
+    results = Parallel(n_jobs=-1, verbose=3)(delayed(exp)(it, n, n_z, n_t, iv_strength, endogeneity_strength,
                                                             fname, dgp_num, moment_fn,
                                                             special_test=clever,
                                                             lambda_l2_h=lambda_l2_h,
@@ -209,10 +209,10 @@ def run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength):
                                                 for it in range(100))
     if direct_riesz:
         joblib.dump((true, results),
-                    f'direct_res_fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_eps_{epsilon}_clever_{clever}_l2h_{lambda_l2_h:.4f}.jbl')
+                    f'direct_res_fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_{endogeneity_strength}_eps_{epsilon}_clever_{clever}_l2h_{lambda_l2_h:.4f}.jbl')
     else:
         joblib.dump((true, results),
-                    f'res_fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_eps_{epsilon}_clever_{clever}_l2h_{lambda_l2_h:.4f}.jbl')
+                    f'res_fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_{endogeneity_strength}_eps_{epsilon}_clever_{clever}_l2h_{lambda_l2_h:.4f}.jbl')
 
 
 n_z = None
@@ -234,7 +234,8 @@ for direct_riesz in [False]:
         for fname in ['abs', '2dpoly', 'sigmoid', 'sin']:
             for n in [500, 1000, 2000]:
                 for iv_strength in [.2, .5]:
-                    run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength)
+                    for endogeneity_strength in [.3, .8]:
+                        run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength)
 
 
 for direct_riesz in [False]:
@@ -242,4 +243,5 @@ for direct_riesz in [False]:
         for fname in ['2dpoly']:
             for n in [2000, 20000]:
                 for iv_strength in [.05, .1]:
-                    run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength)
+                    for endogeneity_strength in [.3, .8]:
+                        run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength)
