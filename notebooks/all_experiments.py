@@ -215,17 +215,17 @@ def run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endoge
                     f'res_fn_{fname}_n_{n}_n_t_{n_t}_stregth_{iv_strength}_{endogeneity_strength}_eps_{epsilon}_clever_{clever}_l2h_{lambda_l2_h:.4f}.jbl')
 
 
-# endogeneity_strength = 0.3  # will be ignored in this first set of experiments
-# n_z = None
-# for n_t in [0, 5, 10]:
-#     for direct_riesz in [False]:
-#         for clever in [False]:
-#             for fname in ['cct']:
-#                 for n in [5000, 1000]:
-#                     for iv_strength in [0.0, .5]:   # will be used as the correlation of first variable with other variables
-#                         if n_t == 0 and iv_strength == 0.5:
-#                             continue
-#                         run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength)
+endogeneity_strength = 0.3  # will be ignored in this first set of experiments
+n_z = None
+for n_t in [0, 5, 10]:
+    for direct_riesz in [False]:
+        for clever in [False]:
+            for fname in ['cct']:
+                for n in [5000, 1000]:
+                    for iv_strength in [0.0, .5]:   # will be used as the correlation of first variable with other variables
+                        if n_t == 0 and iv_strength == 0.5:
+                            continue
+                        run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength)
 
 
 n_z = 1
