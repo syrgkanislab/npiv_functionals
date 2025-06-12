@@ -160,7 +160,7 @@ class RKHSIVCV(RKHSIV):
             scores.append([])
             for alpha_scale in alpha_scales:
                 alpha = self._get_alpha(delta_train, alpha_scale)
-                a = scipy.linalg.pinv(KMK_train + alpha * Kh_train) @ B_train
+                a = scipy.linalg.pinv(KMK_train + alpha * Kh_train, rtol=1e-5) @ B_train
                 norm_squared = (a.T @ Kh_train @ a)[0, 0]
                 res = Y[test] - Kh[np.ix_(test, train)] @ a
                 scores[it].append((res.T @ M_test @ res)[
@@ -181,7 +181,7 @@ class RKHSIVCV(RKHSIV):
 
         self.T = T.copy()
         self.a = np.linalg.pinv(
-            Kh @ M @ Kh + self.best_alpha * Kh) @ Kh @ M @ Y
+            Kh @ M @ Kh + self.best_alpha * Kh, rtol=1e-5) @ Kh @ M @ Y
         return self
 
 
@@ -306,9 +306,9 @@ class ApproxRKHSIVCV(ApproxRKHSIV):
         for it, (train, test) in enumerate(KFold(n_splits=self.cv).split(Z)):
             RootKf_train, RootKf_test = RootKf[train], RootKf[test]
             RootKh_train, RootKh_test = RootKh[train], RootKh[test]
-            Q_train = scipy.linalg.pinv(
+            Q_train = scipy.linalg.pinvh(
                 RootKf_train.T @ RootKf_train / (2 * n_train * (delta_train**2)) + np.eye(self.n_components) / 2)
-            Q_test = scipy.linalg.pinv(
+            Q_test = scipy.linalg.pinvh(
                 RootKf_test.T @ RootKf_test / (2 * n_test * (delta_test**2)) + np.eye(self.n_components) / 2)
             A_train = RootKh_train.T @ RootKf_train
             AQA_train = A_train @ Q_train @ A_train.T
@@ -316,8 +316,8 @@ class ApproxRKHSIVCV(ApproxRKHSIV):
             scores.append([])
             for alpha_scale in alpha_scales:
                 alpha = self._get_alpha(delta_train, alpha_scale)
-                a = scipy.linalg.pinv(AQA_train + alpha *
-                                   np.eye(self.n_components)) @ B_train
+                a = scipy.linalg.pinvh(AQA_train + alpha *
+                                   np.eye(self.n_components), rtol=1e-5, atol=1e-5) @ B_train
                 res = RootKf_test.T @ (Y[test] - RootKh_test @ a)
                 scores[it].append((res.T @ Q_test @ res)[
                                   0, 0] / (len(test)**2))
@@ -329,11 +329,11 @@ class ApproxRKHSIVCV(ApproxRKHSIV):
         delta = self._get_delta(n)
         self.best_alpha = self._get_alpha(delta, self.best_alpha_scale)
 
-        Q = scipy.linalg.pinv(RootKf.T @ RootKf /
+        Q = scipy.linalg.pinvh(RootKf.T @ RootKf /
                            (2 * n * delta**2) + np.eye(self.n_components) / 2)
         A = RootKh.T @ RootKf
         W = (A @ Q @ A.T + self.best_alpha * np.eye(self.n_components))
         B = A @ Q @ RootKf.T @ Y
-        self.a = scipy.linalg.pinv(W) @ B
+        self.a = scipy.linalg.pinvh(W) @ B
         self.fitted_delta = delta
         return self

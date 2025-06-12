@@ -235,7 +235,7 @@ for direct_riesz in [False]:
         for fname in ['abs', '2dpoly', 'sigmoid', 'sin']:
             for n in [500, 1000, 2000]:
                 for iv_strength in [.2, .5]:
-                    for endogeneity_strength in [.05, .1, .3]:
+                    for endogeneity_strength in [.1, .3]:
                         run_experiment(fname, direct_riesz, clever, n, n_z, n_t, iv_strength, endogeneity_strength)
 
 
